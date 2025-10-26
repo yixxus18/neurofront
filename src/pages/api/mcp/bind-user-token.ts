@@ -7,7 +7,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { chat_id, user_jwt, ttl_sec = 900 } = req.body;
+    const { chat_id, user_jwt, ttl_sec: _ttl_sec = 900 } = req.body;
 
     if (!chat_id || !user_jwt) {
       return res.status(400).json({

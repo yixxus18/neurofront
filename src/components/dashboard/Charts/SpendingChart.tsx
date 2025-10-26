@@ -23,8 +23,8 @@ ChartJS.register(
 
 interface SpendingChartProps {
   data?: {
-    categories: string[];
-    amounts: number[];
+    incomes: any[];
+    expenses: any[];
   };
   type?: 'bar' | 'doughnut';
   className?: string;
@@ -36,8 +36,8 @@ const SpendingChart = ({
   className = '' 
 }: SpendingChartProps) => {
   const chartData = {
-    categories: data?.expenses?.map(e => new Date(e.date).toLocaleDateString()) || [],
-    amounts: data?.expenses?.map(e => e.value) || [],
+    categories: data?.expenses?.map((e: any) => new Date(e.date).toLocaleDateString()) || [],
+    amounts: data?.expenses?.map((e: any) => e.value) || [],
   };
 
   const barData = {

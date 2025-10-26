@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion';
 import { User, Bot } from 'lucide-react';
-import React from 'react';
 
 interface Message {
   id: string;

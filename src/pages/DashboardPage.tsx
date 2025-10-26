@@ -6,11 +6,8 @@ import MetricCard from '../components/ui/MetricCard';
 import SpendingChart from '../components/dashboard/Charts/SpendingChart';
 import SavingsChart from '../components/dashboard/Charts/SavingsChart';
 import RecentTransactions from '../components/dashboard/RecentTransactions';
-import ChatHistory from '../components/assistant/ChatHistory';
-
 import { useAuth } from '../hooks/useAuth';
 import apiClient from '../api/apiClient';
-import toast from 'react-hot-toast';
 
 const DashboardPage = () => {
   const { user } = useAuth();
