@@ -16,7 +16,7 @@ const LoginPage = ({ onLoginSuccess }: LoginPageProps) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
-  const [error, setError] = useState('');
+  const [, setError] = useState('');
   const { login, loading } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
