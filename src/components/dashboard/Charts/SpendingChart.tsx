@@ -35,8 +35,10 @@ const SpendingChart = ({
   type = 'bar',
   className = '' 
 }: SpendingChartProps) => {
-  // Sin datos hardcodeados - se conectará con API
-  const chartData = data || { categories: [], amounts: [] };
+  const chartData = {
+    categories: data?.expenses?.map(e => new Date(e.date).toLocaleDateString()) || [],
+    amounts: data?.expenses?.map(e => e.value) || [],
+  };
 
   const barData = {
     labels: chartData.categories,

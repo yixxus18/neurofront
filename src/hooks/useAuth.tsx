@@ -52,14 +52,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const verifyToken = async (tokenToVerify: string) => {
     try {
-      const response = await apiClient.post('/api/v1/auth/me');
+      const response = await apiClient.get('/api/v1/auth/me');
       const userData = response.data.data;
 
       const user: User = {
         id: userData.id.toString(),
         name: userData.name,
         email: userData.email,
-        userType: userData.accounttypeid === 2 ? 'business' : 'normal'
+        userType: userData.account_type_id === 'enterprise' ? 'business' : 'normal'
       };
 
       setUser(user);
@@ -82,54 +82,28 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       setLoading(true);
 
-      // Usuario de prueba temporal
-      const testUsers = [
-        { email: 'demo@banorte.com', password: 'demo123', name: 'Usuario Demo', accounttypeid: 1 },
-        { email: 'empresario@banorte.com', password: 'empresa123', name: 'Empresario Demo', accounttypeid: 2 },
-        { email: 'admin@banorte.com', password: 'admin123', name: 'Admin Demo', accounttypeid: 2 }
-      ];
+      const response = await apiClient.post('/api/v1/auth/login', {
+        email,
+        password
+      });
 
-      const user = testUsers.find(u => u.email === email && u.password === password);
-
-      if (user) {
-        // Simular respuesta de API exitosa
+      if (response.data.success) {
         return {
           success: true,
           requiresCode: true,
-          message: 'Se envió un código de verificación a tu correo.'
+          message: response.data.message
         };
-      }
-
-      // Si no es usuario de prueba, intentar con API real
-      try {
-        const response = await apiClient.post('/api/v1/auth/login', {
-          email,
-          password
-        });
-
-        if (response.data.success) {
-          return {
-            success: true,
-            requiresCode: true,
-            message: response.data.message
-          };
-        } else {
-          return {
-            success: false,
-            message: 'Credenciales inválidas'
-          };
-        }
-      } catch (apiError) {
+      } else {
         return {
           success: false,
-          message: 'Credenciales inválidas'
+          message: response.data.message || 'Credenciales inválidas'
         };
       }
     } catch (error: any) {
       console.error('Error en login:', error);
       return {
         success: false,
-        message: error.response?.data?.message || 'Error al iniciar sesión'
+        message: error.response?.data?.message || 'Error al conectar con el servidor'
       };
     } finally {
       setLoading(false);
@@ -140,61 +114,36 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       setLoading(true);
 
-      // Usuarios de prueba
-      const testUsers = [
-        { email: 'demo@banorte.com', password: 'demo123', name: 'Usuario Demo', accounttypeid: 1 },
-        { email: 'empresario@banorte.com', password: 'empresa123', name: 'Empresario Demo', accounttypeid: 2 },
-        { email: 'admin@banorte.com', password: 'admin123', name: 'Admin Demo', accounttypeid: 2 }
-      ];
+      const response = await apiClient.post('/api/v1/auth/verify-code', {
+        email,
+        code
+      });
 
-      const user = testUsers.find(u => u.email === email);
+      if (response.data.success) {
+        const token = response.data.data.access_token;
+        const userData = response.data.data.user;
 
-      if (user && code === '123456') {
-        // Simular respuesta exitosa para usuarios de prueba
-        const mockToken = `demo_token_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-        const userData: User = {
-          id: `demo_${Date.now()}`,
-          name: user.name,
-          email: user.email,
-          userType: user.accounttypeid === 2 ? 'business' : 'normal'
+        const user: User = {
+          id: userData.id.toString(),
+          name: userData.name,
+          email: userData.email,
+          userType: userData.account_type_id === 'enterprise' ? 'business' : 'normal'
         };
 
-        localStorage.setItem('banorte_token', mockToken);
-        setToken(mockToken);
-        setUser(userData);
+        // Guardar en localStorage
+        localStorage.setItem('banorte_token', token);
+        console.log('Token guardado:', token);
+        console.log('Usuario guardado:', user);
+
+        // Actualizar estado - IMPORTANTE: setToken primero, luego setUser
+        setToken(token);
+        setUser(user);
+
+        // Forzar re-renderizado verificando que el estado se actualice
+        console.log('Estado actualizado - isAuthenticated debería ser true ahora');
 
         return true;
-      }
-
-      // Si no es usuario de prueba, intentar con API real
-      try {
-        const response = await apiClient.post('/api/v1/auth/verify-code', {
-          email,
-          code
-        });
-
-        if (response.data.success) {
-          const token = response.data.data.accesstoken;
-          const userData = response.data.data.user;
-
-          const user: User = {
-            id: userData.id.toString(),
-            name: userData.name,
-            email: userData.email,
-            userType: userData.accounttypeid === 2 ? 'business' : 'normal'
-          };
-
-          localStorage.setItem('banorte_token', token);
-          setToken(token);
-          setUser(user);
-
-          return true;
-        } else {
-          return false;
-        }
-      } catch (apiError) {
-        console.error('Error en API real:', apiError);
+      } else {
         return false;
       }
     } catch (error: any) {

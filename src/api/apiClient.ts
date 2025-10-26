@@ -11,10 +11,10 @@ export const apiClient = axios.create({
   },
 });
 
-// Interceptor para añadir el token de autenticación a todas las peticiones
 apiClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('banorte_token');
+    console.log('Token:', token);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -25,7 +25,6 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Interceptor para manejar respuestas de error
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {

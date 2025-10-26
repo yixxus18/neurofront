@@ -1,4 +1,4 @@
-import { ScrollText, Plus, MessageCircle } from 'lucide-react';
+import { ScrollText, Plus, MessageCircle, Trash2 } from 'lucide-react';
 
 interface Chat {
   id: string;
@@ -9,10 +9,11 @@ interface ChatHistoryProps {
   chats: Chat[];
   onSelectChat: (id: string) => void;
   onCreateNew: () => void;
+  onDeleteChat: (id: string) => void;
   currentChatId?: string | null;
 }
 
-const ChatHistory = ({ chats, onSelectChat, onCreateNew, currentChatId }: ChatHistoryProps) => {
+const ChatHistory = ({ chats, onSelectChat, onCreateNew, onDeleteChat, currentChatId }: ChatHistoryProps) => {
   return (
     <div className="bg-banorte-gray-50 p-4 flex flex-col h-full">
       <div className="flex items-center justify-between mb-4">
@@ -35,14 +36,22 @@ const ChatHistory = ({ chats, onSelectChat, onCreateNew, currentChatId }: ChatHi
               <li
                 key={chat.id}
                 onClick={() => onSelectChat(chat.id)}
-                className={`flex items-center p-3 rounded-lg cursor-pointer transition-colors ${
+                className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
                   currentChatId === chat.id
                     ? 'bg-banorte-red text-white'
                     : 'hover:bg-banorte-gray-100 text-banorte-gray-700'
                 }`}
               >
-                <MessageCircle size={16} className="mr-3 flex-shrink-0" />
-                <span className="text-sm truncate">{chat.title}</span>
+                <div className="flex items-center truncate">
+                  <MessageCircle size={16} className="mr-3 flex-shrink-0" />
+                  <span className="text-sm truncate">{chat.title}</span>
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDeleteChat(chat.id); }}
+                  className="p-1 text-banorte-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
+                >
+                  <Trash2 size={14} />
+                </button>
               </li>
             ))}
           </ul>

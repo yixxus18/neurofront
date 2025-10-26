@@ -4,14 +4,13 @@ import { MessageCircle, X, Send, Bot, Maximize, Minimize } from 'lucide-react';
 import ChatMessage from './ChatMessage';
 import ChatHistory from './ChatHistory';
 import { useAuth } from '../../hooks/useAuth';
-import apiClient from '../../api/apiClient';
 import toast from 'react-hot-toast';
 
 interface Message {
   id: string;
   content: string;
   sender: 'user' | 'assistant';
-  timestamp: Date;
+  timestamp: Date | string;
   type?: 'text' | 'chart' | 'analysis';
   data?: any;
 }
@@ -19,14 +18,23 @@ interface Message {
 interface ChatHistoryItem {
   id: string;
   title: string;
+  contexto: any[];
 }
 
-interface ChatCreationModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onCreate: (name: string) => Promise<void>;
-  isLoading: boolean;
-}
+// <--- FUNCIÓN CLAVE NUEVA --->
+// Esta función busca y extrae un objeto JSON de un string de texto.
+const extractJsonFromString = (text: string): object | null => {
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    return null;
+  }
+  try {
+    return JSON.parse(jsonMatch[0]);
+  } catch (error) {
+    console.error("Failed to parse extracted JSON:", error);
+    return null;
+  }
+};
 
 const AssistantWindow = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -36,98 +44,17 @@ const AssistantWindow = () => {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { } = useAuth();
+  const { user } = useAuth();
 
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
-  const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([]);
-  const [isCreatingChat, setIsCreatingChat] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const { token } = useAuth();
+  const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>(() => {
+    const savedChats = localStorage.getItem('banorte_chat_history');
+    return savedChats ? JSON.parse(savedChats) : [];
+  });
 
-  // Cargar historial de chats al montar
   useEffect(() => {
-    loadChatHistory();
-  }, []);
-
-  const loadChatHistory = async () => {
-    try {
-      const response = await apiClient.post('/api/v1/tools/chats/show');
-      if (response.data.success) {
-        setChatHistory(response.data.data.items.map((item: any) => ({
-          id: item.chat_id,
-          title: item.name
-        })));
-      }
-    } catch (error) {
-      console.error('Error loading chat history:', error);
-    }
-  };
-
-  const createNewChat = async (chatName: string) => {
-    try {
-      setIsCreatingChat(true);
-      const response = await apiClient.post('/api/v1/tools/chats', {
-        name: chatName
-      });
-
-      if (response.data.success) {
-        const newChatId = response.data.data.chat_id;
-        const newChat: ChatHistoryItem = {
-          id: newChatId,
-          title: chatName
-        };
-
-        setChatHistory(prev => [newChat, ...prev]);
-        setCurrentChatId(newChatId);
-        setMessages([]);
-        setShowCreateModal(false);
-        toast.success('Chat creado exitosamente');
-
-        // Bind user token to MCP session
-        try {
-          await bindUserTokenToMCP(newChatId);
-        } catch (bindError) {
-          console.error('Error binding user token to MCP:', bindError);
-          toast.error('Chat creado pero error al conectar con MCP');
-        }
-
-        return newChatId;
-      }
-    } catch (error: any) {
-      console.error('Error creating chat:', error);
-      toast.error(error.response?.data?.message || 'Error al crear el chat');
-      throw error;
-    } finally {
-      setIsCreatingChat(false);
-    }
-  };
-
-  const bindUserTokenToMCP = async (chatId: string) => {
-    // This should be called from a server-side function/API route
-    // For now, we'll make the call directly (in production, move to BFF)
-    const response = await fetch('/api/mcp/bind-user-token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        chat_id: chatId,
-        user_jwt: token, // From useAuth hook
-        ttl_sec: 900
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to bind user token to MCP');
-    }
-
-    const data = await response.json();
-    if (!data.success) {
-      throw new Error(data.message || 'MCP binding failed');
-    }
-
-    return data;
-  };
+    localStorage.setItem('banorte_chat_history', JSON.stringify(chatHistory));
+  }, [chatHistory]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -139,70 +66,91 @@ const AssistantWindow = () => {
 
   const sendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
-    if (!currentChatId) {
-      toast.error('Por favor, crea o selecciona un chat primero');
+    if (!user || !user.id) {
+      toast.error("Debes iniciar sesión para usar el asistente.");
       return;
     }
 
+    const messageToSend = inputValue;
+    setInputValue('');
+    setIsLoading(true);
+
     const userMessage: Message = {
       id: Date.now().toString(),
-      content: inputValue,
+      content: messageToSend,
       sender: 'user',
       timestamp: new Date(),
       type: 'text'
     };
 
-    setMessages(prev => [...prev, userMessage]);
-    const messageToSend = inputValue;
-    setInputValue('');
-    setIsLoading(true);
+    if (!currentChatId) {
+      const newChatId = Date.now().toString();
+      const newChat: ChatHistoryItem = { id: newChatId, title: messageToSend, contexto: [userMessage] };
+      setChatHistory(prev => [newChat, ...prev]);
+      setCurrentChatId(newChatId);
+      setMessages([userMessage]);
+    } else {
+      setMessages(prev => [...prev, userMessage]);
+      setChatHistory(prev => prev.map(chat =>
+        chat.id === currentChatId ? { ...chat, contexto: [...chat.contexto, userMessage] } : chat
+      ));
+    }
 
     try {
-      // 1. Primero guardar el mensaje del usuario
-      await apiClient.post('/api/v1/tools/chats/append', {
-        chat_id: currentChatId,
-        user_content: messageToSend,
-        assistant_content: "" 
+      const mcpUrl = `http://localhost:8081/mcp/messages`;
+
+      const response = await fetch(mcpUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: user.id,
+          user_text: messageToSend,
+          chat_id: currentChatId || "temp-chat-id"
+        }),
       });
 
-      // 2. Obtener el historial actualizado del chat
-      const historyResponse = await apiClient.post('/api/v1/tools/chats/show');
-      const currentChat = historyResponse.data.data.items.find((item: any) => item.chat_id === currentChatId);
-
-      if (currentChat && currentChat.contexto) {
-        const mcpResponse = await apiClient.post('/api/v1/tools/chat/send', {
-          chat_id: currentChatId,
-          context: currentChat.contexto,
-          message: messageToSend
-        });
-
-        if (mcpResponse.data.success) {
-          const assistantResponse = mcpResponse.data.data.response;
-
-          await apiClient.post('/api/v1/tools/chats/append', {
-            chat_id: currentChatId,
-            user_content: messageToSend,
-            assistant_content: assistantResponse
-          });
-
-          const assistantMessage: Message = {
-            id: (Date.now() + 1).toString(),
-            content: assistantResponse,
-            sender: 'assistant',
-            timestamp: new Date(),
-            type: 'text'
-          };
-
-          setMessages(prev => [...prev, assistantMessage]);
-        } else {
-          throw new Error(mcpResponse.data.message || 'Error en la respuesta del servidor');
+      if (!response.ok) {
+        const errorText = await response.text();
+        try {
+          const errorData = JSON.parse(errorText);
+          throw new Error(errorData.message || 'Error en la respuesta del MCP');
+        } catch (e) {
+          throw new Error(errorText || `Error del servidor MCP: ${response.status}`);
         }
-      } else {
-        throw new Error('No se pudo obtener el contexto del chat');
       }
+
+      const result = await response.json();
+      const { answer } = result.data;
+
+      // <--- CAMBIO CLAVE AQUÍ --->
+      // Usamos nuestra nueva función para obtener el JSON de forma segura.
+      const parsedAnswer = extractJsonFromString(answer);
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: parsedAnswer ? (parsedAnswer as any).summary : answer,
+        sender: 'assistant',
+        timestamp: new Date(),
+        type: parsedAnswer ? 'analysis' : 'text',
+        data: parsedAnswer,
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
+      setChatHistory(prev => prev.map(chat =>
+        chat.id === (currentChatId || (chatHistory.length > 0 ? chatHistory[0].id : null))
+          ? { ...chat, contexto: [...chat.contexto, assistantMessage] }
+          : chat
+      ));
+
     } catch (error: any) {
       console.error('Error al enviar mensaje:', error);
-      toast.error(error.response?.data?.message || 'Error al conectar con el asistente. Inténtalo de nuevo.');
+      if (error.message.includes('Failed to fetch')) {
+        toast.error('Error de conexión con el servidor. Revisa la configuración de CORS.');
+      } else {
+        toast.error(error.message || 'Error al conectar con el asistente.');
+      }
 
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -224,58 +172,31 @@ const AssistantWindow = () => {
     }
   };
 
-  const handleSelectChat = async (id: string) => {
-    try {
+  const handleCreateNewChat = () => {
+    const newChatId = Date.now().toString();
+    const newChat: ChatHistoryItem = {
+      id: newChatId,
+      title: 'Nuevo Chat',
+      contexto: []
+    };
+    setChatHistory(prev => [newChat, ...prev]);
+    setCurrentChatId(newChatId);
+    setMessages([]);
+  };
+
+  const handleDeleteChat = (id: string) => {
+    setChatHistory(prev => prev.filter(chat => chat.id !== id));
+    if (currentChatId === id) {
+      setCurrentChatId(null);
+      setMessages([]);
+    }
+  };
+
+  const handleSelectChat = (id: string) => {
+    const selectedChat = chatHistory.find(chat => chat.id === id);
+    if (selectedChat) {
       setCurrentChatId(id);
-      setMessages([]);
-
-      const chatResponse = await apiClient.post('/api/v1/tools/chats/show-by-filter', {
-        chat_id: id
-      });
-
-      if (chatResponse.data.success && chatResponse.data.data) {
-        const chatData = chatResponse.data.data;
-
-        if (chatData.contexto && Array.isArray(chatData.contexto)) {
-          // Convertir el contexto en mensajes para mostrar
-          const chatMessages: Message[] = [];
-          chatData.contexto.forEach((ctx: any, index: number) => {
-            if (ctx.role === 'user' && ctx.content && ctx.content.trim()) {
-              chatMessages.push({
-                id: `user-${Date.now()}-${index}`,
-                content: ctx.content.trim(),
-                sender: 'user',
-                timestamp: new Date(ctx.ts ? (typeof ctx.ts === 'object' ? ctx.ts.$date : ctx.ts) : Date.now()),
-                type: 'text'
-              });
-            } else if (ctx.role === 'assistant' && ctx.content && ctx.content.trim()) {
-              chatMessages.push({
-                id: `assistant-${Date.now()}-${index}`,
-                content: ctx.content.trim(),
-                sender: 'assistant',
-                timestamp: new Date(ctx.ts ? (typeof ctx.ts === 'object' ? ctx.ts.$date : ctx.ts) : Date.now()),
-                type: 'text'
-              });
-            }
-          });
-
-          // Ordenar mensajes por timestamp
-          chatMessages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-
-          setMessages(chatMessages);
-          toast.success(`Chat cargado: ${chatHistory.find(c => c.id === id)?.title}`);
-        } else {
-          setMessages([]);
-          toast.success(`Chat seleccionado: ${chatHistory.find(c => c.id === id)?.title}`);
-        }
-      } else {
-        setMessages([]);
-        toast.error('No se pudo cargar el chat seleccionado');
-      }
-    } catch (error) {
-      console.error('Error loading chat messages:', error);
-      toast.error('Error al cargar los mensajes del chat');
-      setMessages([]);
+      setMessages(selectedChat.contexto);
     }
   };
 
@@ -285,68 +206,8 @@ const AssistantWindow = () => {
     setIsHistoryOpen(false);
   };
 
-  const ChatCreationModal: React.FC<ChatCreationModalProps> = ({ isOpen, onClose, onCreate, isLoading }) => {
-    const [chatName, setChatName] = useState('');
-
-    const handleSubmit = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!chatName.trim()) return;
-
-      try {
-        await onCreate(chatName);
-        setChatName('');
-      } catch (error) {
-      }
-    };
-
-    if (!isOpen) return null;
-
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-xl p-6 w-96 max-w-[90vw]">
-          <h3 className="text-lg font-semibold text-banorte-gray-800 mb-4">Crear Nuevo Chat</h3>
-          <form onSubmit={handleSubmit}>
-            <input
-              type="text"
-              value={chatName}
-              onChange={(e) => setChatName(e.target.value)}
-              placeholder="Nombre del chat"
-              className="w-full px-3 py-2 border border-banorte-gray-300 rounded-lg focus:ring-2 focus:ring-banorte-red focus:border-transparent mb-4"
-              disabled={isLoading}
-              required
-            />
-            <div className="flex space-x-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 px-4 py-2 border border-banorte-gray-300 text-banorte-gray-700 rounded-lg hover:bg-banorte-gray-50"
-                disabled={isLoading}
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="flex-1 px-4 py-2 bg-banorte-red text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
-                disabled={isLoading || !chatName.trim()}
-              >
-                {isLoading ? 'Creando...' : 'Crear'}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <>
-      <ChatCreationModal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onCreate={createNewChat}
-        isLoading={isCreatingChat}
-      />
-
       {!isFullScreen && (
         <motion.button
           initial={{ scale: 0 }}
@@ -376,7 +237,8 @@ const AssistantWindow = () => {
                   <ChatHistory
                     chats={chatHistory}
                     onSelectChat={handleSelectChat}
-                    onCreateNew={() => setShowCreateModal(true)}
+                    onCreateNew={handleCreateNewChat}
+                    onDeleteChat={handleDeleteChat}
                     currentChatId={currentChatId}
                   />
                 </div>

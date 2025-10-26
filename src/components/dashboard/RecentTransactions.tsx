@@ -11,9 +11,16 @@ interface Transaction {
   icon: 'credit' | 'shopping' | 'transport' | 'food';
 }
 
-const RecentTransactions = () => {
-  // Sin datos hardcodeados - se conectará con API
-  const transactions: Transaction[] = [];
+const RecentTransactions = ({ transactions = [] }: { transactions: any[] }) => {
+  const formattedTransactions: Transaction[] = transactions.map(t => ({
+    id: String(t.id),
+    description: t.description,
+    amount: Number(t.amount),
+    type: t.type,
+    category: `Categoría ${t.category_id}`,
+    date: t.date_transaction,
+    icon: 'credit'
+  }));
 
   const getIcon = (iconType: string) => {
     switch (iconType) {
@@ -62,14 +69,14 @@ const RecentTransactions = () => {
       </div>
 
       <div className="space-y-4">
-        {transactions.length === 0 ? (
+        {formattedTransactions.length === 0 ? (
           <div className="text-center py-8">
             <CreditCard size={48} className="mx-auto text-banorte-gray-300 mb-4" />
             <p className="text-banorte-gray-500 text-sm">No hay transacciones recientes</p>
             <p className="text-banorte-gray-400 text-xs mt-1">Las transacciones aparecerán aquí</p>
           </div>
         ) : (
-          transactions.map((transaction, index) => (
+          formattedTransactions.map((transaction, index) => (
             <motion.div
               key={transaction.id}
               initial={{ opacity: 0, x: -20 }}

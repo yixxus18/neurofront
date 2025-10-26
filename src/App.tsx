@@ -30,6 +30,8 @@ const AppContent = () => {
   };
 
   const handleVerificationSuccess = () => {
+    // El estado se actualizará automáticamente cuando useAuth detecte el token
+    // Solo limpiamos el estado local de verificación
     setShowVerification(false);
     setPendingEmail('');
   };
