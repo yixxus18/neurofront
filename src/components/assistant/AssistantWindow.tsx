@@ -97,7 +97,7 @@ const AssistantWindow = () => {
     }
 
     try {
-      const mcpUrl = `http://localhost:8081/mcp/messages`;
+      const mcpUrl = `https://mcpp.onrender.com/mcp/messages`;
 
       const response = await fetch(mcpUrl, {
         method: 'POST',
